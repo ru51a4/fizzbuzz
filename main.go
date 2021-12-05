@@ -25,9 +25,14 @@ func lex(str string) []token {
 
 	//next
 	j := 0
+	isString := false
 	var next = func() string {
 		for i := j; i < len(str); i++ {
-			if str[i] == ' ' || str[i] == '"' || str[i] == '\n' || str[i] == '\t' || str[i] == '\r' {
+			if str[i] == ' ' && isString {
+				j = i + 1
+				return string(str[i])
+			}
+			if str[i] == ' ' || str[i] == '\n' || str[i] == '\t' || str[i] == '\r' {
 				if i == len(str)-1 {
 					j = i + 1
 				}
@@ -39,8 +44,7 @@ func lex(str string) []token {
 		}
 		return ""
 	}
-	var nextnext func(val string) string
-	nextnext = func(val string) string {
+	var nextnext = func(val string) string {
 		for i := j; i < len(str); i++ {
 			if str[i] == ' ' || str[i] == '"' || str[i] == '\n' || str[i] == '\t' || str[i] == '\r' {
 				continue
@@ -59,6 +63,10 @@ func lex(str string) []token {
 
 	for j <= len(str)-1 {
 		cChar := next()
+		if cChar == "\"" {
+			isString = !isString
+			continue
+		}
 		if cChar == "{" {
 			res = append(res, token{
 				value:     t,
@@ -112,10 +120,7 @@ func serialize(cNode node) string {
 	deepNode = func(cNode node, key string, isFinal bool) {
 		count := 0
 		if len(key) > 0 {
-			res = res + "\"" + key + "\""
-		}
-		if len(key) > 0 {
-			res = res + ":"
+			res = res + "\"" + key + "\"" + ":"
 		}
 		if cNode.nodeType == "object" {
 			res = res + "{"
@@ -131,21 +136,21 @@ func serialize(cNode node) string {
 					res = res + ","
 				}
 			}
+			count = 0
+			for key, item := range cNode.childrens {
+				count = count + 1
+				deepNode(*item, key, count == len(cNode.childrens))
+			}
 		} else {
 			for i, item := range cNode.valuesPrimitive {
 				res = res + item
-				if i != len(cNode.valuesPrimitive)-1 || len(cNode.childrens) != 0 {
+				if i != len(cNode.valuesPrimitive)-1 || len(cNode.childrensArray) != 0 {
 					res = res + ","
 				}
 			}
-		}
-		count = 0
-		for key, item := range cNode.childrens {
-			count = count + 1
-			deepNode(*item, key, count == len(cNode.childrens))
-		}
-		for i, item := range cNode.childrensArray {
-			deepNode(*item, "", i == len(cNode.childrensArray)-1)
+			for i, item := range cNode.childrensArray {
+				deepNode(*item, "", i == len(cNode.childrensArray)-1)
+			}
 		}
 		if cNode.nodeType == "object" {
 			res = res + "}"
@@ -165,15 +170,14 @@ func main() {
 	if err != nil {
 		fmt.Print(err)
 	}
-	jsonStr := string(b)
 	var stack []*node
 	var tObj *node
-	var tokens []token = lex(jsonStr)
+	var tokens []token = lex(string(b))
 
 	//main
-	var initToken string = tokens[0].value
+	var initToken string = tokens[0].tokenType
 	tokens = tokens[1:]
-	if initToken == "" {
+	if initToken == "openObj" {
 		var cNode = node{
 			childrens: make(map[string]*node),
 			nodeType:  "object",
